@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#050307">
+  <title>Lanetli Vazolar</title>
+  <meta name="description" content="30 vazo, gizli yılanlar, tek çekiç. Arkadaşınla online korku oyunu.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="ikonlar/ikon-192.png">
+  <link rel="apple-touch-icon" href="ikonlar/ikon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Lanetli Vazolar">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="sahne"></div>
+  <div id="vinyet"></div>
+  <div id="flas"></div>
+
+  <header id="oyuncular"></header>
+  <div id="deste" hidden></div>
+  <button id="menuBtn" title="Ana menüye dön" hidden>🏠</button>
+  <button id="sesBtn" title="Sesi aç/kapat">🔊</button>
+
+  <div id="alt">
+    <div id="mesaj" hidden></div>
+    <div id="dugmeler">
+      <button id="kartBtn" hidden>🃏 Kart çek</button>
+      <button id="direktBtn" class="ikinci" hidden>🔨 Sadece 1 vazo kır</button>
+      <button id="vazgecBtn" class="ikinci" hidden>↩ Başka vazo</button>
+      <button id="vurBtn" hidden>🔨 VUR</button>
+      <button id="onayBtn" hidden disabled>🐍 Yılanları sakla</button>
+    </div>
+  </div>
+
+  <section id="menu" class="ekran">
+    <div class="kart">
+      <h1>Lanetli Vazolar</h1>
+      <p class="alt-baslik">30 vazo. Gizli yılanlar. Tek çekiç.</p>
+      <h3>🌐 Arkadaşınla online</h3>
+      <input id="onlineAd" class="giris" maxlength="12" placeholder="Adın" autocomplete="off">
+      <div class="onlineSatir">
+        <button id="odaAcBtn">Oda aç</button>
+        <input id="odaKodu" class="giris" maxlength="5" placeholder="Oda kodu" autocomplete="off" autocapitalize="characters">
+        <button id="katilBtn" class="ikinci">Katıl</button>
+      </div>
+      <div id="onlineDurum"></div>
+      <button id="onlineBaslaBtn" hidden disabled>Oyunu başlat</button>
+
+      <h3>📱 Tek telefonda (sırayla)</h3>
+      <div id="oyuncuSayisi" class="secenekler"></div>
+      <div id="isimler"></div>
+      <button id="baslaBtn">Mahzene in</button>
+      <details>
+        <summary>Nasıl oynanır?</summary>
+        <ol>
+          <li>Herkes sırayla, gizlice <b>3 vazoya</b> yılanını saklar. Kendi yılanlarının yerini bilirsin.</li>
+          <li>Aynı vazoyu seçenler o vazodaki yılanı paylaşır; yılanın çıngırağında hepsinin rengi olur.</li>
+          <li>Sıran gelince ya <b>kart çek</b> ya da kart çekmeden <b>sadece 1 vazo kır</b>. Destede 40 kart var; iyi kart oranı ekranda yazar ve kart çekildikçe değişir.</li>
+          <li>Vazoyu seçip VUR'a bir kez bas: çekiç vazo kırılana kadar vurur. Bazısı ilk vuruşta, bazısı 5. vuruşta kırılır.</li>
+          <li>İçinden yılan çıkarsa <b>1 can</b> kaybedersin (kendi yılanın bile olsa!). Canı biten elenir.</li>
+          <li>Son hayatta kalan kazanır.</li>
+          <li><b>Online:</b> biri "Oda aç"a basar, çıkan kodu arkadaşına söyler. Arkadaşın adını ve kodu yazıp "Katıl"a basar. Herkes yılanlarını kendi telefonunda saklar.</li>
+        </ol>
+      </details>
+      <p id="surumNotu" class="surum"></p>
+    </div>
+  </section>
+
+  <section id="perde" class="ekran" hidden>
+    <div class="kart">
+      <h2 id="perdeBaslik"></h2>
+      <p id="perdeAciklama"></p>
+      <button id="perdeBtn"></button>
+    </div>
+  </section>
+
+  <section id="kartEkrani" class="ekran" hidden>
+    <div class="kartKutusu">
+      <div id="oyunKarti" class="oyunKarti"></div>
+      <button id="kartTamam">Tamam</button>
+      <p id="kartBekle" hidden></p>
+    </div>
+  </section>
+
+  <section id="rakipEkrani" class="ekran" hidden>
+    <div class="kart">
+      <h2>🎭 Kimin adına kıracaksın?</h2>
+      <p>Yılan çıkarsa canı gidecek rakibi seç.</p>
+      <div id="rakipler"></div>
+    </div>
+  </section>
+
+  <section id="cikisEkrani" class="ekran" hidden>
+    <div class="kart">
+      <h2>🏠 Ana menüye dön</h2>
+      <p id="cikisMetni">Emin misin? Bu oyun silinecek ve baştan başlayacaksınız.</p>
+      <div class="ikiDugme">
+        <button id="cikisHayir" class="ikinci">Hayır, devam</button>
+        <button id="cikisEvet">Evet, çık</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="sonuc" class="ekran" hidden>
+    <div class="kart">
+      <h2 id="sonucBaslik"></h2>
+      <p id="sonucAciklama"></p>
+      <button id="tekrarBtn">Tekrar oyna</button>
+    </div>
+  </section>
+
+  <section id="baglantiEkrani" class="ekran" hidden>
+    <div class="kart">
+      <h2>📡 Bağlantı</h2>
+      <p id="baglantiMetni"></p>
+      <button id="yenidenBaglanBtn">🔄 Yeniden bağlan</button>
+    </div>
+  </section>
+
+  <!-- 3D motoru (Three.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js"></script>
+  <script src="ses.js"></script>
+  <script src="sahne.js"></script>
+  <script src="oyun.js"></script>
+  <!-- Online oyun: PeerJS iki telefonu doğrudan bağlar; ag.js oda açma/katılma ve hamle aktarımını yapar -->
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="ag.js"></script>
+  <script>
+    // Servis çalışanı: telefona kurulum ve otomatik güncelleme için (sadece internetten açılınca)
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      // Yeni sürüm gelince sayfa bir kez kendini yeniler (sadece ana menüdeyken, oyun bozulmasın)
+      const eskiKontrol = navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (eskiKontrol && durum.asama === 'menu' && AG.mod === 'yerel') location.reload();
+      });
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>

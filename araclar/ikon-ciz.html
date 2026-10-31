@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<!--
+  Lanetli Vazolar - uygulama simgesini çizer.
+  Adres sonuna ?boyut=512&pay=0.08 yazılır (pay: kenar boşluğu; "maskable" simgede daha büyük).
+  Simgeler şu komutla PNG'ye çevrilir (Edge görünmez modda ekran görüntüsü alır):
+    msedge --headless --hide-scrollbars --window-size=512,512 --screenshot=ikonlar/ikon-512.png "file:///.../araclar/ikon-ciz.html?boyut=512&pay=0.08"
+-->
+<html>
+<head>
+<meta charset="UTF-8">
+<style>html, body { margin: 0; background: #070305; overflow: hidden; } canvas { display: block; }</style>
+</head>
+<body>
+<script>
+  const ayar = new URLSearchParams(location.search);
+  const boyut = +(ayar.get('boyut') || 512);
+  const pay = +(ayar.get('pay') || 0.08);
+  const c = document.createElement('canvas');
+  c.width = c.height = boyut;
+  document.body.appendChild(c);
+  const g = c.getContext('2d');
+  g.scale(boyut / 512, boyut / 512);
+
+  // Arka plan: karanlıkta kırmızı bir parıltı
+  const arka = g.createRadialGradient(256, 300, 20, 256, 280, 330);
+  arka.addColorStop(0, '#5a0d14');
+  arka.addColorStop(0.55, '#1c0609');
+  arka.addColorStop(1, '#070305');
+  g.fillStyle = arka;
+  g.fillRect(0, 0, 512, 512);
+
+  g.save();
+  const k = 1 - pay;
+  g.translate(256, 268);
+  g.scale(k, k);
+  g.translate(-256, -268);
+
+  // Vazo
+  const vazo = new Path2D();
+  vazo.moveTo(200, 110);
+  vazo.lineTo(312, 110);
+  vazo.lineTo(304, 132);
+  vazo.bezierCurveTo(300, 160, 290, 175, 330, 200);
+  vazo.bezierCurveTo(420, 250, 420, 360, 350, 420);
+  vazo.lineTo(330, 440);
+  vazo.lineTo(182, 440);
+  vazo.lineTo(162, 420);
+  vazo.bezierCurveTo(92, 360, 92, 250, 182, 200);
+  vazo.bezierCurveTo(222, 175, 212, 160, 208, 132);
+  vazo.closePath();
+  const kil = g.createLinearGradient(110, 0, 400, 0);
+  kil.addColorStop(0, '#5e2410');
+  kil.addColorStop(0.4, '#c0602c');
+  kil.addColorStop(0.7, '#8a3a18');
+  kil.addColorStop(1, '#3a160a');
+  g.fillStyle = kil;
+  g.fill(vazo);
+
+  // Desenler ve çatlak
+  g.save();
+  g.clip(vazo);
+  g.fillStyle = '#1a0904';
+  g.fillRect(100, 236, 320, 12);
+  g.fillRect(100, 372, 320, 8);
+  g.strokeStyle = '#1a0904';
+  g.lineWidth = 7;
+  g.beginPath();
+  for (let x = 100, i = 0; x <= 420; x += 22, i++) g.lineTo(x, 300 + (i % 2 ? 22 : 0));
+  g.stroke();
+  g.strokeStyle = '#0c0402';
+  g.lineWidth = 6;
+  g.lineJoin = 'round';
+  g.beginPath();
+  [[300, 205], [282, 245], [296, 275], [270, 318], [284, 350], [262, 395]].forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  g.stroke();
+  g.lineWidth = 4;
+  g.beginPath();
+  g.moveTo(296, 275);
+  g.lineTo(325, 292);
+  g.stroke();
+  g.restore();
+
+  // Vazonun karanlık ağzı ve içinden bakan yılan gözleri
+  g.fillStyle = '#050203';
+  g.beginPath();
+  g.ellipse(256, 114, 58, 16, 0, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = '#d77a40';
+  g.lineWidth = 6;
+  g.stroke();
+  [[232, 114], [280, 114]].forEach(([x, y]) => {
+    g.shadowColor = '#ffb000';
+    g.shadowBlur = 18;
+    g.fillStyle = '#ffc400';
+    g.beginPath();
+    g.ellipse(x, y, 13, 9, 0, 0, Math.PI * 2);
+    g.fill();
+    g.shadowBlur = 0;
+    g.fillStyle = '#000';
+    g.beginPath();
+    g.ellipse(x, y, 2.6, 8, 0, 0, Math.PI * 2);
+    g.fill();
+  });
+  g.restore();
+</script>
+</body>
+</html>
