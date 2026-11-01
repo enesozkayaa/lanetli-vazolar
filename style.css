@@ -217,6 +217,11 @@ details ol { padding-left: 20px; line-height: 1.5; }
 #baglantiEkrani { z-index: 11; }
 .oyuncu.koptu { opacity: 0.6; }
 
+/* Ses kaydından sonra efekt seçimi */
+#efektSecimi { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; pointer-events: auto; max-width: 560px; }
+#efektSecimi button { padding: 8px 12px; font-size: 14px; }
+#efektSecimi button.secili { background: linear-gradient(#8c1420, #5a0a12); box-shadow: 0 0 0 2px #fff; }
+
 @media (max-width: 480px) {
   h1 { font-size: 42px; }
   .oyuncu { font-size: 12px; padding: 4px 8px; }

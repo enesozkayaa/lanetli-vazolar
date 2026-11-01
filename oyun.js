@@ -365,26 +365,54 @@ function kayitDugmesiniAc() {
   $('sesKaydetBtn').textContent = '🎙️ Yılan sesini kaydet';
   $('sesKaydetBtn').disabled = false;
   $('sesKaydetBtn').hidden = !navigator.mediaDevices?.getUserMedia;
+  $('efektSecimi').hidden = true;
 }
 
 async function sesKaydet() {
   const dugme = $('sesKaydetBtn');
   dugme.disabled = true;
   $('onayBtn').disabled = true;
+  $('efektSecimi').hidden = true;
   mesaj('🔴 Kaydediliyor (2 saniye)... Tısla, bağır, gül, ne istersen!');
   try {
-    durum.kayit = await Ses.kaydet(2);
-    Ses.kayitCal(durum.kayit);
+    const efekt = durum.kayit?.efekt ?? 0;  // tekrar kaydedince önceki seçim korunur
+    durum.kayit = { ...(await Ses.kaydet(2)), efekt };
     dugme.textContent = '🎙️ Tekrar kaydet';
-    mesaj('✅ Sesin kaydedildi! Yılanın çıkınca herkes bunu duyacak (bazen hızlı, bazen kalın...).');
-    await bekle(2500);
+    efektleriCiz();
+    efektSec(efekt);
   } catch (e) {
     mesaj('🎙️ Mikrofona izin verilmedi. Sorun değil: yılanın normal tıslar.');
     dugme.hidden = true;
     await bekle(2500);
+    yerlesimMesaji();
   }
   dugme.disabled = false;
-  yerlesimMesaji();
+  $('onayBtn').disabled = durum.yerlesim.size !== CAN;
+}
+
+// Kayıttan sonra 5 efekt düğmesi: basınca o efektle dinlenir ve seçilir.
+// Seçilen efekt oyun boyunca hep aynı kalır.
+const EFEKT_IKONLARI = ['🗣️', '🐿️', '🐌', '🎵', '👹'];
+function efektleriCiz() {
+  const kutu = $('efektSecimi');
+  kutu.innerHTML = '';
+  Ses.EFEKT_ADLARI.forEach((ad, i) => {
+    const b = document.createElement('button');
+    b.className = 'ikinci';
+    b.dataset.efekt = i;
+    b.textContent = `${EFEKT_IKONLARI[i]} ${ad[0].toLocaleUpperCase('tr')}${ad.slice(1)}`;
+    b.onclick = () => efektSec(i);
+    kutu.appendChild(b);
+  });
+  kutu.hidden = false;
+}
+
+function efektSec(i) {
+  if (!durum.kayit) return;
+  durum.kayit.efekt = i;
+  Ses.kayitCal(durum.kayit, i);
+  $('efektSecimi').querySelectorAll('button').forEach(b => b.classList.toggle('secili', +b.dataset.efekt === i));
+  mesaj(`🎙️ Yılanın böyle çıkacak: <b>${EFEKT_IKONLARI[i]} ${Ses.EFEKT_ADLARI[i]}</b>. Diğerlerini dinlemek için düğmelere bas, beğendiğinde vazolarını seç.`);
 }
 
 // Online'da gönderilen kayıt: ham sayılar ArrayBuffer olarak gelir (çok uzunsa kabul edilmez)
@@ -393,15 +421,15 @@ function kayitCoz(ses) {
   const veri = new Int16Array(ses.veri instanceof ArrayBuffer ? ses.veri : ses.veri.buffer.slice(ses.veri.byteOffset, ses.veri.byteOffset + ses.veri.byteLength));
   const oran = Number(ses.oran);
   if (!veri.length || veri.length > 48000 || !(oran >= 8000 && oran <= 48000)) return null;
-  return { oran, veri };
+  const efekt = Number.isInteger(ses.efekt) && ses.efekt >= 0 && ses.efekt < Ses.EFEKT_ADLARI.length ? ses.efekt : 0;
+  return { oran, veri, efekt };
 }
 
-// Yılanın sahiplerinin kayıtlarını çal (birden çok sahip varsa biraz arayla).
-// Hangi efektle çalınacağı vazonun numarasından belli olur, herkeste aynıdır.
+// Yılanın sahiplerinin kayıtlarını, her birinin seçtiği efektle çal (birden çok sahip varsa biraz arayla)
 function sahipSesleri(i, sahipler) {
   const kayitli = sahipler.filter(o => o.ses);
-  kayitli.forEach((o, k) => Ses.kayitCal(o.ses, i + k, { gecikme: k * 0.35 }));
-  return kayitli.length ? ` 🎙️ <small>(${Ses.EFEKT_ADLARI[i % Ses.EFEKT_ADLARI.length]})</small>` : '';
+  kayitli.forEach((o, k) => Ses.kayitCal(o.ses, o.ses.efekt ?? 0, { gecikme: k * 0.35 }));
+  return kayitli.length ? ` 🎙️ <small>(${kayitli.map(o => Ses.EFEKT_ADLARI[o.ses.efekt ?? 0]).join(', ')})</small>` : '';
 }
 
 // Online'da: herkes aynı anda, kendi telefonunda saklar
@@ -422,7 +450,9 @@ function cevrimiciYerlestirme() {
 function yerlesimMesaji() {
   const adet = durum.yerlesim.size;
   const o = durum.oyuncular[cevrimici() ? AG.benimNo : durum.sira];
-  const kayit = $('sesKaydetBtn').hidden ? '' : durum.kayit ? ' · 🎙️ sesin kayıtlı' : ' · istersen 🎙️ yılan sesini kaydet';
+  const kayit = $('sesKaydetBtn').hidden ? ''
+    : durum.kayit ? ` · 🎙️ sesin: ${EFEKT_IKONLARI[durum.kayit.efekt]} ${Ses.EFEKT_ADLARI[durum.kayit.efekt]}`
+      : ' · istersen 🎙️ yılan sesini kaydet';
   mesaj(`${adEtiketi(o)}: yılanlarını saklayacağın ${CAN} vazoya dokun (${adet}/${CAN})${kayit}`);
   $('onayBtn').disabled = adet !== CAN;
 }
@@ -446,9 +476,10 @@ function yerlesimiOnayla() {
   Sahne.isaretleriTemizle();
   $('onayBtn').hidden = true;
   $('sesKaydetBtn').hidden = true;
+  $('efektSecimi').hidden = true;
   if (cevrimici()) {
-    // Kayıt da diğer telefonlara gider (ham sayılar, ArrayBuffer olarak)
-    const ses = kayit ? { oran: kayit.oran, veri: kayit.veri.buffer.slice(0) } : null;
+    // Kayıt da diğer telefonlara gider (ham sayılar ArrayBuffer olarak + seçilen efekt)
+    const ses = kayit ? { oran: kayit.oran, veri: kayit.veri.buffer.slice(0), efekt: kayit.efekt } : null;
     girdi('yerlestir', { vazolar: secim, ses });
     yerlesimBekleniyor();
     return;

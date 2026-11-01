@@ -60,12 +60,12 @@ const Sahne = (() => {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.5;
+    renderer.toneMappingExposure = 1.75;
     kap.appendChild(renderer.domElement);
 
     sahne = new THREE.Scene();
     sahne.background = new THREE.Color(0x07050a);
-    sahne.fog = new THREE.FogExp2(0x07050a, 0.075);
+    sahne.fog = new THREE.FogExp2(0x07050a, 0.06);
     kamera = new THREE.PerspectiveCamera(50, 1, 0.03, 60);
 
     isiklariKur();
@@ -106,8 +106,8 @@ const Sahne = (() => {
   }
 
   function isiklariKur() {
-    sahne.add(new THREE.AmbientLight(0x5a5a7a, 0.9));
-    sahne.add(new THREE.HemisphereLight(0x8a90b8, 0x3a2414, 0.6));  // tepeden soğuk, yerden sıcak yansıma
+    sahne.add(new THREE.AmbientLight(0x5a5a7a, 1.2));
+    sahne.add(new THREE.HemisphereLight(0x8a90b8, 0x3a2414, 0.85));  // tepeden soğuk, yerden sıcak yansıma
 
     const ay = new THREE.DirectionalLight(0x9aa6d0, 1.1);  // pencereden sızan ay ışığı
     ay.position.set(-3, 8, 2);
@@ -119,7 +119,7 @@ const Sahne = (() => {
     sahne.add(ay);
 
     // Köşelerde titreyen mumlar
-    [[-3.3, -2.4], [3.3, -2.1], [-3.1, 2.3], [3.2, 2.5], [0, -2.7]].forEach(([x, z]) => {
+    [[-3.3, -2.4], [3.3, -2.1], [-3.1, 2.3], [3.2, 2.5], [0, -2.7], [-3.5, 0.1], [3.5, 0.2], [0, 2.8]].forEach(([x, z]) => {
       const mum = new THREE.Mesh(
         new THREE.CylinderGeometry(0.05, 0.06, 0.32, 12),
         new THREE.MeshStandardMaterial({ color: 0xd8ccb0, roughness: 0.9 }),
@@ -131,7 +131,7 @@ const Sahne = (() => {
       );
       alev.scale.set(1, 1.8, 1);
       alev.position.set(x, 0.38, z);
-      const isik = new THREE.PointLight(0xff8c3a, 5, 10, 1);
+      const isik = new THREE.PointLight(0xff8c3a, 6, 10, 1);
       isik.position.set(x, 0.55, z);
       sahne.add(mum, alev, isik);
       mumlar.push({ isik, alev, faz: rnd() * 100 });
@@ -181,7 +181,7 @@ const Sahne = (() => {
     const c = document.createElement('canvas');
     c.width = c.height = 256;
     const g = c.getContext('2d');
-    g.fillStyle = koyu ? `hsl(${ton}, 20%, 14%)` : `hsl(${ton}, 40%, 32%)`;
+    g.fillStyle = koyu ? `hsl(${ton}, 30%, 25%)` : `hsl(${ton}, 40%, 32%)`;
     g.fillRect(0, 0, 256, 256);
     for (let k = 0; k < 900; k++) {
       g.fillStyle = `rgba(${rnd() < 0.5 ? 0 : 255},${rnd() < 0.5 ? 0 : 220},${rnd() < 0.5 ? 0 : 180},${0.03 + rnd() * 0.05})`;
@@ -1012,7 +1012,7 @@ const Sahne = (() => {
 
     mumlar.forEach(m => {
       const titreme = 0.75 + 0.15 * Math.sin(z * 9 + m.faz) + 0.1 * Math.sin(z * 23 + m.faz * 2) + (rnd() - 0.5) * 0.12;
-      m.isik.intensity = 5 * titreme;
+      m.isik.intensity = 6 * titreme;
       m.alev.scale.set(1, 1.6 + titreme * 0.4, 1);
     });
 
