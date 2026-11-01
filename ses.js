@@ -345,6 +345,92 @@ const Ses = (() => {
     gurultu({ sure: 1.2, seviye: 0.08, tip: 'lowpass', frekans: 400 });
   }
 
+  // ---------- 🎙️ Oyuncunun kendi yılan sesi ----------
+  // Mikrofondan kısa bir kayıt alınır: 16 kHz, tek kanal, 16 bit. Böyle ham sayılar olarak
+  // tutulunca Android ve iPhone arasında "bu ses biçimini açamıyorum" sorunu çıkmaz.
+  const KAYIT_ORANI = 16000;
+  async function kaydet(saniye = 2) {
+    const c = motor();
+    const akis = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: true },
+    });
+    const kaynak = c.createMediaStreamSource(akis);
+    const isleyici = c.createScriptProcessor(4096, 1, 1);
+    const parcalar = [];
+    isleyici.onaudioprocess = e => parcalar.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    const sessiz = c.createGain();  // kayıt sırasında hoparlörden geri çalmasın
+    sessiz.gain.value = 0;
+    kaynak.connect(isleyici);
+    isleyici.connect(sessiz);
+    sessiz.connect(c.destination);
+    await new Promise(coz => setTimeout(coz, saniye * 1000));
+    isleyici.disconnect();
+    kaynak.disconnect();
+    sessiz.disconnect();
+    akis.getTracks().forEach(t => t.stop());
+
+    // Parçaları birleştir, 16 kHz'e indir ve sesi olabildiğince yükselt
+    const toplam = parcalar.reduce((a, p) => a + p.length, 0);
+    const ham = new Float32Array(toplam);
+    let yer = 0;
+    parcalar.forEach(p => {
+      ham.set(p, yer);
+      yer += p.length;
+    });
+    let tepe = 0.0001;
+    for (const x of ham) tepe = Math.max(tepe, Math.abs(x));
+    const kazanc = Math.min(10, 0.95 / tepe);
+    const oran = c.sampleRate / KAYIT_ORANI;
+    const veri = new Int16Array(Math.floor(toplam / oran));
+    for (let i = 0; i < veri.length; i++) {
+      const a = Math.floor(i * oran), b = Math.max(a + 1, Math.floor((i + 1) * oran));
+      let s = 0;
+      for (let j = a; j < b; j++) s += ham[j];
+      veri[i] = Math.max(-1, Math.min(1, (s / (b - a)) * kazanc)) * 32767;
+    }
+    return { oran: KAYIT_ORANI, veri };
+  }
+
+  // Kayıt 5 farklı şekilde çalınabilir
+  const EFEKTLER = [
+    { ad: 'normal', hiz: 1 },
+    { ad: 'hızlı', hiz: 1.8 },
+    { ad: 'yavaş', hiz: 0.55 },
+    { ad: 'ince', hiz: 1.35, filtre: ['highpass', 700] },
+    { ad: 'kalın', hiz: 0.72, filtre: ['lowpass', 900], bozuk: true },
+  ];
+
+  function kayitCal(kayit, efektNo = 0, { gecikme = 0, seviye = 1 } = {}) {
+    if (!kayit?.veri?.length) return;
+    const c = motor();
+    const tampon = c.createBuffer(1, kayit.veri.length, kayit.oran);
+    const kanal = tampon.getChannelData(0);
+    for (let i = 0; i < kayit.veri.length; i++) kanal[i] = kayit.veri[i] / 32768;
+    const kaynak = c.createBufferSource();
+    kaynak.buffer = tampon;
+    const efekt = EFEKTLER[efektNo % EFEKTLER.length];
+    kaynak.playbackRate.value = efekt.hiz;
+    let son = kaynak;
+    if (efekt.filtre) {
+      const f = filtre(efekt.filtre[0], efekt.filtre[1], 0.8);
+      son.connect(f);
+      son = f;
+    }
+    if (efekt.bozuk) {  // hafif cızırtı: canavar gibi
+      const bozucu = c.createWaveShaper();
+      const egri = new Float32Array(256);
+      for (let i = 0; i < 256; i++) egri[i] = Math.tanh((i / 128 - 1) * 3);
+      bozucu.curve = egri;
+      son.connect(bozucu);
+      son = bozucu;
+    }
+    const g = c.createGain();
+    g.gain.value = seviye;
+    son.connect(g);
+    g.connect(ana);
+    kaynak.start(c.currentTime + gecikme);
+  }
+
   function seviyeyiAyarla() {
     if (ana) ana.gain.setTargetAtTime(acik && !susuk ? 0.9 : 0, ctx.currentTime, 0.05);
   }
@@ -369,7 +455,8 @@ const Ses = (() => {
   return {
     ortamBaslat, sessizlik, kalp, vurus, kirilma, hisirti, tiss, cingirak,
     atlama, rahatlama, eleme, secim, yerlestir, kazanma, acKapa,
-    gerilim, kartCek, iyiKart, kotuKart, sustur,
+    gerilim, kartCek, iyiKart, kotuKart, sustur, kaydet, kayitCal,
+    EFEKT_ADLARI: EFEKTLER.map(e => e.ad),
     get acik() { return acik; },
   };
 })();

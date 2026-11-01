@@ -354,8 +354,54 @@ async function yerlestirmeyeGec(no) {
     `Telefonu ${o.ad}${ekA(o.ad)} ver. Diğerleri ekrana bakmasın! ${o.ad}, ${CAN} vazo seçip yılanlarını saklayacak.`,
     `Ben ${o.ad}, hazırım`,
   );
+  kayitDugmesiniAc();
   yerlesimMesaji();
   $('onayBtn').hidden = false;
+}
+
+// ---------- 🎙️ Yılan sesi kaydı (isteğe bağlı) ----------
+function kayitDugmesiniAc() {
+  durum.kayit = null;
+  $('sesKaydetBtn').textContent = '🎙️ Yılan sesini kaydet';
+  $('sesKaydetBtn').disabled = false;
+  $('sesKaydetBtn').hidden = !navigator.mediaDevices?.getUserMedia;
+}
+
+async function sesKaydet() {
+  const dugme = $('sesKaydetBtn');
+  dugme.disabled = true;
+  $('onayBtn').disabled = true;
+  mesaj('🔴 Kaydediliyor (2 saniye)... Tısla, bağır, gül, ne istersen!');
+  try {
+    durum.kayit = await Ses.kaydet(2);
+    Ses.kayitCal(durum.kayit);
+    dugme.textContent = '🎙️ Tekrar kaydet';
+    mesaj('✅ Sesin kaydedildi! Yılanın çıkınca herkes bunu duyacak (bazen hızlı, bazen kalın...).');
+    await bekle(2500);
+  } catch (e) {
+    mesaj('🎙️ Mikrofona izin verilmedi. Sorun değil: yılanın normal tıslar.');
+    dugme.hidden = true;
+    await bekle(2500);
+  }
+  dugme.disabled = false;
+  yerlesimMesaji();
+}
+
+// Online'da gönderilen kayıt: ham sayılar ArrayBuffer olarak gelir (çok uzunsa kabul edilmez)
+function kayitCoz(ses) {
+  if (!ses || !(ses.veri instanceof ArrayBuffer || ArrayBuffer.isView(ses.veri))) return null;
+  const veri = new Int16Array(ses.veri instanceof ArrayBuffer ? ses.veri : ses.veri.buffer.slice(ses.veri.byteOffset, ses.veri.byteOffset + ses.veri.byteLength));
+  const oran = Number(ses.oran);
+  if (!veri.length || veri.length > 48000 || !(oran >= 8000 && oran <= 48000)) return null;
+  return { oran, veri };
+}
+
+// Yılanın sahiplerinin kayıtlarını çal (birden çok sahip varsa biraz arayla).
+// Hangi efektle çalınacağı vazonun numarasından belli olur, herkeste aynıdır.
+function sahipSesleri(i, sahipler) {
+  const kayitli = sahipler.filter(o => o.ses);
+  kayitli.forEach((o, k) => Ses.kayitCal(o.ses, i + k, { gecikme: k * 0.35 }));
+  return kayitli.length ? ` 🎙️ <small>(${Ses.EFEKT_ADLARI[i % Ses.EFEKT_ADLARI.length]})</small>` : '';
 }
 
 // Online'da: herkes aynı anda, kendi telefonunda saklar
@@ -368,6 +414,7 @@ function cevrimiciYerlestirme() {
     yerlesimBekleniyor();
     return;
   }
+  kayitDugmesiniAc();
   yerlesimMesaji();
   $('onayBtn').hidden = false;
 }
@@ -375,7 +422,8 @@ function cevrimiciYerlestirme() {
 function yerlesimMesaji() {
   const adet = durum.yerlesim.size;
   const o = durum.oyuncular[cevrimici() ? AG.benimNo : durum.sira];
-  mesaj(`${adEtiketi(o)}: yılanlarını saklayacağın ${CAN} vazoya dokun (${adet}/${CAN})`);
+  const kayit = $('sesKaydetBtn').hidden ? '' : durum.kayit ? ' · 🎙️ sesin kayıtlı' : ' · istersen 🎙️ yılan sesini kaydet';
+  mesaj(`${adEtiketi(o)}: yılanlarını saklayacağın ${CAN} vazoya dokun (${adet}/${CAN})${kayit}`);
   $('onayBtn').disabled = adet !== CAN;
 }
 
@@ -394,14 +442,19 @@ function yerlesimSecimi(i) {
 
 function yerlesimiOnayla() {
   const secim = [...durum.yerlesim];
+  const kayit = durum.kayit;
   Sahne.isaretleriTemizle();
   $('onayBtn').hidden = true;
+  $('sesKaydetBtn').hidden = true;
   if (cevrimici()) {
-    girdi('yerlestir', { vazolar: secim });
+    // Kayıt da diğer telefonlara gider (ham sayılar, ArrayBuffer olarak)
+    const ses = kayit ? { oran: kayit.oran, veri: kayit.veri.buffer.slice(0) } : null;
+    girdi('yerlestir', { vazolar: secim, ses });
     yerlesimBekleniyor();
     return;
   }
   aktif().yilanlar = secim;
+  aktif().ses = kayit;
   if (durum.sira + 1 < durum.oyuncular.length) yerlestirmeyeGec(durum.sira + 1);
   else vazolariHazirla();
 }
@@ -417,6 +470,7 @@ function yerlesimAl(g) {
   const vazolar = Array.isArray(g.vazolar) ? [...new Set(g.vazolar)].filter(i => Number.isInteger(i) && i >= 0 && i < VAZO_SAYISI) : [];
   if (durum.asama !== 'yerlestir' || !o || o.yilanlar || vazolar.length !== CAN) return;
   o.yilanlar = vazolar;
+  o.ses = kayitCoz(g.ses);
   if (durum.oyuncular.every(x => x.yilanlar)) vazolariHazirla();
   else if (g.no === AG.benimNo || durum.oyuncular[AG.benimNo].yilanlar) yerlesimBekleniyor();
 }
@@ -680,8 +734,13 @@ async function vazoAcildi(i, kurban) {
   const sahipler = v.sahipler.map(no => durum.oyuncular[no]);
   mesaj('🐍 YILAN!');
   await Sahne.yilanCikar(i, sahipler.map(s => s.hex), v.davranis, {
+    // Sahibinin kaydettiği ses: yüze atlayan yılanda atlama anında, diğerlerinde çıkınca
+    cikti: () => {
+      if (v.davranis !== 'atla') mesaj('🐍 YILAN!' + sahipSesleri(i, sahipler));
+    },
     atladi: () => {
       if (!HIZLI.acik) kirmiziFlas();
+      if (v.davranis !== 'kac') sahipSesleri(i, sahipler);
     },
     gidiyor: () => {
       Ses.rahatlama();
@@ -889,6 +948,7 @@ Sahne.secilebilirlik(i => {
 $('vurBtn').onclick = () => girdi('vur');
 $('vazgecBtn').onclick = () => girdi('vazgec');
 $('onayBtn').onclick = yerlesimiOnayla;
+$('sesKaydetBtn').onclick = sesKaydet;
 $('kartBtn').onclick = () => girdi('kart');
 $('direktBtn').onclick = () => girdi('direkt');
 $('kartTamam').onclick = () => girdi('tamam');

@@ -853,6 +853,7 @@ const Sahne = (() => {
       return !y.olu;
     });
     Ses.hisirti(1.2);
+    if (olaylar.cikti) olaylar.cikti();
     y.bakis = bakis.konum;
     const ustNokta = V(m.x, davranis === 'kac' || davranis === 'donus' ? 0.3 : 0.5, m.z + 0.06);
 
