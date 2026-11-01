@@ -98,26 +98,50 @@ const Ses = (() => {
     ortamKazanc.connect(ana);
     ortamKazanc.gain.exponentialRampToValueAtTime(1, c.currentTime + 4);
 
-    // Derin uğultu: birbirine çok yakın iki nota "dalgalanan" bir gerilim yaratır
-    const alcak = filtre('lowpass', 160, 4);
+    // Derin uğultu: birbirine çok yakın notalar "dalgalanır", aradaki triton (şeytan aralığı) huzursuzluk verir
+    const alcak = filtre('lowpass', 180, 4);
     const ugultu = c.createGain();
-    ugultu.gain.value = 0.09;
+    ugultu.gain.value = 0.11;
     alcak.connect(ugultu);
     ugultu.connect(ortamKazanc);
-    [55, 55.6, 82.4].forEach(f => {
+    [41.2, 55, 55.6, 77.8].forEach(f => {
       const o = c.createOscillator();
       o.type = 'sawtooth';
       o.frequency.value = f;
       o.connect(alcak);
       o.start();
     });
-    yavasDalga(alcak.frequency, 0.06, 90);
+    yavasDalga(alcak.frequency, 0.06, 110);
+
+    // Nefes alır gibi kabarıp sönen, göğüste hissedilen çok kalın ses
+    const nefes = c.createOscillator();
+    nefes.frequency.value = 36;
+    const nefesG = c.createGain();
+    nefesG.gain.value = 0.05;
+    nefes.connect(nefesG);
+    nefesG.connect(ortamKazanc);
+    nefes.start();
+    yavasDalga(nefesG.gain, 0.13, 0.05);
+
+    // Tiz, gergin keman benzeri ses: yan yana iki nota yavaşça yükselip alçalır
+    const tiz = c.createGain();
+    tiz.gain.value = 0.008;
+    tiz.connect(ortamKazanc);
+    [880, 932.3, 1244.5].forEach((f, k) => {
+      const o = c.createOscillator();
+      o.type = k === 2 ? 'sine' : 'triangle';
+      o.frequency.value = f;
+      yavasDalga(o.frequency, 4 + k, 3);  // titreşim
+      o.connect(tiz);
+      o.start();
+    });
+    yavasDalga(tiz.gain, 0.035, 0.008);
 
     // Mahzende esen rüzgâr
     const ruzgar = gurultuKaynagi();
     const rf = filtre('bandpass', 380, 0.8);
     const rg = c.createGain();
-    rg.gain.value = 0.05;
+    rg.gain.value = 0.065;
     ruzgar.connect(rf);
     rf.connect(rg);
     rg.connect(ortamKazanc);
@@ -137,14 +161,54 @@ const Ses = (() => {
     lfo.start();
   }
 
+  // Ara sıra karanlıktan gelen sesler (4-10 saniyede bir, hangisinin geleceği belli olmaz)
   function rastgeleOlay() {
     setTimeout(() => {
-      const zar = Math.random();
-      if (zar < 0.4) damla();
-      else if (zar < 0.75) inilti();
-      else gurultu({ sure: 2.5, seviye: 0.03, frekans: 1800, q: 6, atak: 1 });  // uzaktan fısıltı
+      const olaylar = [damla, inilti, fisilti, gicirti, kapiVurusu, metal, muzikKutusu, gumbur];
+      olaylar[Math.floor(Math.random() * olaylar.length)]();
       rastgeleOlay();
-    }, 6000 + Math.random() * 10000);
+    }, 4000 + Math.random() * 6000);
+  }
+
+  // Birden çok ağızdan gelen, anlaşılmayan fısıltı
+  function fisilti() {
+    for (let k = 0; k < 3; k++) {
+      const f = 1200 + Math.random() * 1800;
+      gurultu({ gecikme: k * 0.35 + Math.random() * 0.2, sure: 0.9 + Math.random() * 0.6, seviye: 0.035, frekans: f, q: 8, atak: 0.2, bitisFrekans: f * (0.7 + Math.random() * 0.6) });
+    }
+  }
+
+  // Yavaşça açılan eski bir kapının gıcırtısı
+  function gicirti() {
+    const f = 300 + Math.random() * 200;
+    ton(f, { sure: 1.6, seviye: 0.03, tip: 'sawtooth', bitis: f * 0.55, atak: 0.3 });
+    gurultu({ sure: 1.6, seviye: 0.03, frekans: f * 2, q: 12, atak: 0.3, bitisFrekans: f });
+  }
+
+  // Uzakta bir kapıya üç kez vuruluyor...
+  function kapiVurusu() {
+    [0, 0.45, 0.9].forEach(g => {
+      ton(110, { gecikme: g, sure: 0.18, seviye: 0.12, bitis: 60 });
+      gurultu({ gecikme: g, sure: 0.08, seviye: 0.05, tip: 'lowpass', frekans: 700 });
+    });
+  }
+
+  // Taşa sürtünen metal
+  function metal() {
+    gurultu({ sure: 1.4, seviye: 0.025, tip: 'bandpass', frekans: 3200, q: 15, atak: 0.4, bitisFrekans: 5200 });
+    ton(2600, { sure: 1.2, seviye: 0.008, tip: 'sine', bitis: 2400, atak: 0.5 });
+  }
+
+  // Bozuk, detone bir müzik kutusu
+  function muzikKutusu() {
+    const notalar = [1046.5, 987.8, 880, 830.6];
+    notalar.forEach((f, k) => ton(f * (1 + (Math.random() - 0.5) * 0.03), { gecikme: k * 0.42, sure: 0.9, seviye: 0.025, tip: 'triangle' }));
+  }
+
+  // Derinlerden gelen gümbürtü
+  function gumbur() {
+    ton(38, { sure: 2.2, seviye: 0.18, bitis: 28, atak: 0.3 });
+    gurultu({ sure: 2, seviye: 0.05, tip: 'lowpass', frekans: 200, atak: 0.4 });
   }
 
   function damla() {

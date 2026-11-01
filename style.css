@@ -18,7 +18,23 @@ html, body {
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  /* iPhone: çift dokunuşla yakınlaşma olmasın (yakınlaşınca küçültülemiyordu) */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
 }
+button, input, select { touch-action: manipulation; }
+/* iPhone 16 pikselden küçük yazılı kutuya dokununca ekranı yakınlaştırır */
+input, select { font-size: 16px !important; }
+
+/* Online oyunda oda kodu: biri çıkarsa geri dönmesi için herkes görsün */
+#odaBilgisi {
+  position: fixed; top: 58px; right: 10px;
+  padding: 5px 10px; border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  font-size: 13px; color: var(--soluk);
+  user-select: all;
+}
+#odaBilgisi b { color: var(--altin); letter-spacing: 2px; }
 
 #sahne { position: fixed; inset: 0; }
 #sahne canvas { display: block; touch-action: none; }
@@ -157,7 +173,7 @@ details ol { padding-left: 20px; line-height: 1.5; }
 
 /* Deste bilgisi */
 #deste {
-  position: fixed; top: 62px; right: 10px;
+  position: fixed; top: 94px; right: 10px;
   padding: 6px 10px; border-radius: 10px;
   background: rgba(0, 0, 0, 0.55);
   font-size: 13px; color: var(--soluk);

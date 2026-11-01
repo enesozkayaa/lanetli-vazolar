@@ -990,3 +990,7 @@ window.addEventListener('keydown', e => {
   }
 });
 menuKur();
+
+// iPhone'da iki parmakla ya da çift dokunuşla sayfa yakınlaşmasın (oyunda geri küçültülemiyordu)
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
