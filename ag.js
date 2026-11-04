@@ -88,8 +88,26 @@ const Ag = (() => {
     return false;
   }
 
+  // Odadayken diğer düğmeler kilitlenir; odadan çıkmak için "Odayı kapat / Odadan çık" görünür
   function kilitle() {
     ['odaAcBtn', 'katilBtn', 'odaKodu', 'onlineAd', 'baslaBtn'].forEach(id => ($(id).disabled = true));
+    cikisDugmesi(AG.mod === 'ev' ? '❌ Odayı kapat' : '↩️ Odadan çık');
+  }
+
+  function cikisDugmesi(yazi) {
+    $('odaKapatBtn').textContent = yazi;
+    $('odaKapatBtn').hidden = !yazi;
+  }
+
+  // Odayı kapat (oda sahibi) ya da odadan çık / bağlanmaktan vazgeç (misafir): her şey sıfırlanır
+  function odadanCik() {
+    try {
+      sessionStorage.removeItem(OTOMATIK_KATIL);  // yenileyince odaya kendiliğinden girmesin
+    } catch (e) { /* yoksa da olur */ }
+    try {
+      ag.peer?.destroy();  // arkadaşların bağlantısı da kapanır
+    } catch (e) { /* zaten kapanmış */ }
+    location.reload();
   }
 
   // İnternet gidip gelince PeerJS sunucusuyla bağlantı da kopar; birkaç saniyede bir yeniden denenir
@@ -127,6 +145,7 @@ const Ag = (() => {
     if (!ad || !peerVarMi()) return;
     const kod = [...Array(KOD_UZUNLUK)].map(() => KOD_HARFLERI[Math.floor(Math.random() * KOD_HARFLERI.length)]).join('');
     durumYaz('⏳ Oda açılıyor...');
+    cikisDugmesi('❌ Vazgeç');
     try {
       ag.peer?.destroy();
     } catch (e) { /* eski deneme zaten kapanmış */ }
@@ -276,6 +295,7 @@ const Ag = (() => {
     }
     ag.kod = kod;
     durumYaz('⏳ Odaya bağlanılıyor...');
+    cikisDugmesi('↩️ Vazgeç');
     try {
       ag.peer?.destroy();
     } catch (e) { /* eski bağlantı zaten kapanmış */ }
@@ -450,6 +470,7 @@ const Ag = (() => {
     if (e.key === 'Enter') odayaKatil();
   });
   $('onlineBaslaBtn').addEventListener('click', oyunuBaslatEv);
+  $('odaKapatBtn').addEventListener('click', odadanCik);
   $('yenidenBaglanBtn').addEventListener('click', () => location.reload());
   $('surumNotu').textContent = `sürüm ${SURUM}`;
 
