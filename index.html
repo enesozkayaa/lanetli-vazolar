@@ -141,7 +141,8 @@
       // Yeni sürüm gelince sayfa bir kez kendini yeniler (sadece ana menüdeyken, oyun bozulmasın)
       const eskiKontrol = navigator.serviceWorker.controller;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (eskiKontrol && durum.asama === 'menu' && AG.mod === 'yerel') location.reload();
+        // Yeni sürüm gelince menüdeysek sayfa yenilenir; ama oda kuruluyor/katılınıyorsa asla (oda kaybolurdu)
+        if (eskiKontrol && durum.asama === 'menu' && AG.mod === 'yerel' && document.getElementById('odaKapatBtn').hidden) location.reload();
       });
       navigator.serviceWorker.register('sw.js');
     }

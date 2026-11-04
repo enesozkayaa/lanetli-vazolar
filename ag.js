@@ -20,7 +20,7 @@
 
 const Ag = (() => {
   // Online kısmı her değiştiğinde 1 artır: eski sürümle gelen oyuncu odaya alınmaz
-  const SURUM = 5;
+  const SURUM = 6;
   const ODA_ONEKI = 'lanetli-vazolar-oda-';
   const KOD_HARFLERI = 'ABCDEFGHJKLMNPRSTUVYZ23456789';  // karışabilecek O/0, I/1 yok
   const KOD_UZUNLUK = 5;
@@ -30,6 +30,13 @@ const Ag = (() => {
   const OTOMATIK_SURE = 8000;   // kopan oyuncunun sırası bu kadar bekledikten sonra otomatik oynanır
   const AD_ANAHTARI = 'lanetliVazolar.onlineAd';
   const OTOMATIK_KATIL = 'lanetliVazolar.otomatikKatil';
+  // Bağlantı ayarı: telefonlar doğrudan bağlanır; kendi adreslerini öğrenmek için iki STUN sunucusu.
+  // (Bazı modemler doğrudan bağlantıya izin vermez; onun için bir TURN aktarma sunucusu gerekir.)
+  const BAGLANTI_AYARI = {
+    config: { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:global.stun.twilio.com:3478'] }] },
+  };
+  const DENEME_ARALIGI = 5000;  // katılma isteği cevapsız kalırsa bu kadar sonra yeniden denenir
+  const KATILMA_SURESI = 30000; // bu kadar denedikten sonra ne yapılacağı söylenir
 
   const ag = {
     peer: null,
@@ -149,7 +156,7 @@ const Ag = (() => {
     try {
       ag.peer?.destroy();
     } catch (e) { /* eski deneme zaten kapanmış */ }
-    ag.peer = new Peer(ODA_ONEKI + kod);
+    ag.peer = new Peer(ODA_ONEKI + kod, BAGLANTI_AYARI);
     ag.peer.on('open', () => {
       if (AG.mod === 'ev') return;  // internet gidip gelince tekrar "open" gelir; oda zaten açık
       AG.mod = 'ev';
@@ -299,22 +306,41 @@ const Ag = (() => {
     try {
       ag.peer?.destroy();
     } catch (e) { /* eski bağlantı zaten kapanmış */ }
-    const peer = new Peer();
+    const peer = new Peer(BAGLANTI_AYARI);
     ag.peer = peer;
     sunucuyaYenidenBaglan(peer);
-    // 15 saniyede bağlanılamazsa sonsuza kadar "bağlanılıyor" yazmasın, ne yapılacağını söylesin
+    // 30 saniyede bağlanılamazsa sonsuza kadar "bağlanılıyor" yazmasın, ne yapılacağını söylesin
     setTimeout(() => {
       if (ag.peer !== peer || ag.baglanti) return;
-      durumYaz('❌ 15 saniyedir bağlanılamadı. Şunları dene:<br>'
+      durumYaz('❌ 30 saniyedir bağlanılamadı. Şunları dene:<br>'
         + '• Oda sahibi oyunu <b>açık</b> tutsun, ekranı kilitlenmesin (kodu göndermek için WhatsApp’a geçtiyse oyuna geri dönsün).<br>'
         + '• İkiniz de aynı Wi-Fi’ye bağlanın ya da ikiniz de mobil veriye geçin.<br>'
         + '• Sonra tekrar <b>Katıl</b>’a bas.');
       ['katilBtn', 'odaKodu', 'onlineAd'].forEach(id => $(id) && ($(id).disabled = false));
-    }, 15000);
-    peer.on('open', () => {
+    }, KATILMA_SURESI);
+    let deneme = 0;
+    // Katılma isteği: oda sahibinin telefonu o an uyuyorsa (kodu WhatsApp'tan gönderirken) istek kaybolur.
+    // Bu yüzden bağlantı açılmazsa birkaç saniyede bir yeniden istenir; oda sahibi oyuna dönünce bağlanılır.
+    const dene = () => {
       if (ag.peer !== peer || ag.baglanti) return;
+      deneme++;
+      if (deneme > 1) durumYaz(`⏳ Odaya bağlanılıyor... (${deneme}. deneme)<br><small>Oda sahibi oyunu açık tutsun.</small>`);
       const baglanti = peer.connect(ODA_ONEKI + kod, { reliable: true });
+      setTimeout(() => {
+        if (ag.peer !== peer || ag.baglanti || baglanti.open) return;
+        try {
+          baglanti.close();
+        } catch (e) { /* zaten kapanmış */ }
+        if (deneme * DENEME_ARALIGI < KATILMA_SURESI) dene();
+      }, DENEME_ARALIGI);
+      baglantiyiKur(baglanti);
+    };
+    const baglantiyiKur = baglanti => {
       baglanti.on('open', () => {
+        if (ag.baglanti && ag.baglanti !== baglanti) {  // önceki denemelerden biri zaten bağlandı
+          baglanti.close();
+          return;
+        }
         ag.baglanti = baglanti;
         AG.mod = 'misafir';
         gonder({ tip: 'katil', ad, surum: SURUM });
@@ -326,7 +352,8 @@ const Ag = (() => {
       });
       baglanti.on('close', () => ag.baglanti === baglanti && baglantiKoptu());
       baglanti.on('error', () => ag.baglanti === baglanti && baglantiKoptu());
-    });
+    };
+    peer.on('open', dene);
     peer.on('error', e => {
       if (ag.peer !== peer || ag.baglanti) return;
       durumYaz(e.type === 'peer-unavailable'
@@ -471,6 +498,16 @@ const Ag = (() => {
   });
   $('onlineBaslaBtn').addEventListener('click', oyunuBaslatEv);
   $('odaKapatBtn').addEventListener('click', odadanCik);
+  // Telefon oyuna geri dönünce (WhatsApp'tan vb.) sunucu bağlantısı koptuysa hemen tazelenir:
+  // oda sahibi uyurken gelen katılma istekleri böylece kaybolmaz, misafirin bir sonraki denemesi ulaşır.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !ag.peer || ag.peer.destroyed) return;
+    if (ag.peer.disconnected) {
+      try {
+        ag.peer.reconnect();
+      } catch (e) { /* bir sonraki denemede yine denenir */ }
+    }
+  });
   $('yenidenBaglanBtn').addEventListener('click', () => location.reload());
   $('surumNotu').textContent = `sürüm ${SURUM}`;
 

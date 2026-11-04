@@ -20,21 +20,22 @@ const CAN = 3;               // her oyuncunun canı = sakladığı yılan sayıs
 const VAZO_SAYISI = 30;
 const ISIM_ANAHTARI = 'lanetliVazolar.isimler';
 
-// 43 kartlık deste: 29 iyi (%67), 14 kötü. Adetleri değiştirerek oranla oynayabilirsin.
+// 42 kartlık deste: 26 iyi (%62), 16 kötü. Adetleri değiştirerek oranla oynayabilirsin.
 // Güçlü kartlar (Başkası Adına, Dörtlü Göz, Can Ekle) bilerek nadir tutuldu.
+// tek: bütün oyunda sadece bir kez çıkar (deste bitip yeniden karılınca bir daha konmaz).
 const KARTLAR = {
   pas:    { iyi: true,  adet: 6,  ikon: '⏭️', ad: 'Pas', aciklama: 'Bu tur hiç vazo kırmadan sıranı geçirirsin.' },
   yon:    { iyi: true,  adet: 6,  ikon: '🔄', ad: 'Ters Dön', aciklama: 'Sıranın yönü tersine döner. Bu tur vazo kırmazsın.' },
-  muska:  { iyi: true,  adet: 3,  ikon: '🧿', ad: 'Nazar Muskası', aciklama: 'Sana gelecek bir sonraki yılanı engeller. Şimdi 1 vazo kır.' },
+  muska:  { iyi: true,  adet: 1,  tek: true, ikon: '🧿', ad: 'Nazar Muskası', aciklama: 'Sana gelecek bir sonraki yılanı engeller. Şimdi 1 vazo kır.' },
   hediye: { iyi: true,  adet: 3,  ikon: '🎁', ad: 'Lanet Hediyesi', aciklama: '1 vazo kır. Senden sonraki oyuncu 2 vazo kırmak zorunda kalır!' },
   adina:  { iyi: true,  adet: 3,  ikon: '🎭', ad: 'Başkası Adına', aciklama: 'Bir rakip seç, sonra bir vazo kır. Yılan çıkarsa canı giden o olur! (Kendi yılanının yerini biliyorsun...)' },
   dortlu: { iyi: true,  adet: 3,  ikon: '👁️', ad: 'Dörtlü Göz', aciklama: 'Kare şeklindeki 4 vazoyu seç. Altlarında kaç yılan olduğu herkese söylenir. Sonra 1 vazo kırarsın.' },
-  can:    { iyi: true,  adet: 2,  ikon: '💖', ad: 'Can Ekle', aciklama: '+1 can kazanırsın! Sonra 1 vazo kırarsın.' },
+  can:    { iyi: true,  adet: 1,  tek: true, ikon: '💖', ad: 'Can Ekle', aciklama: '+1 can kazanırsın! Sonra 1 vazo kırarsın.' },
   dondur: { iyi: true,  adet: 3,  ikon: '🌀', ad: 'Lanetli Dönüş', aciklama: 'Bütün vazolar yavaşça 90 derece döner (sağa mı sola mı, lanet seçer). Yılanlarının nereye gittiğini iyi takip et! Sonra 1 vazo kırarsın.' },
   iki:    { iyi: false, adet: 7,  ikon: '✌️', ad: 'Çifte Lanet', aciklama: 'Peş peşe 2 vazo kırmak zorundasın.' },
   uc:     { iyi: false, adet: 5,  ikon: '💀', ad: 'Üçlü Lanet', aciklama: 'Peş peşe 3 vazo kırmak zorundasın.' },
   kor:    { iyi: false, adet: 1,  ikon: '🎲', ad: 'Kör Talih', aciklama: 'Vazoyu sen seçemezsin. Lanet senin yerine seçer.' },
-  sira:   { iyi: false, adet: 1,  ikon: '☠️', ad: 'Lanetli Sıra', aciklama: 'Bir sıra seç. O sıradaki bütün vazolar tek tek kendiliğinden kırılır. Çıkan her yılan senden can alır!' },
+  sira:   { iyi: false, adet: 3,  ikon: '☠️', ad: 'Lanetli Sıra', aciklama: 'Bir sıra seç. O sıradaki bütün vazolar tek tek kendiliğinden kırılır. Çıkan her yılan senden can alır!' },
 };
 
 // Hangi beklemede hangi girdiler kabul edilir
@@ -79,6 +80,7 @@ const durum = {
   sira: 0,
   yon: 1,             // 1 = saat yönü, -1 = ters (Ters Dön kartı)
   deste: [],
+  cikanTekler: [],    // bu oyunda çıkmış "tek" kartlar (Nazar Muskası, Can Ekle)
   ceza: 0,            // Lanet Hediyesi: sıradaki oyuncunun zorunlu kıracağı vazo sayısı
   gorev: null,        // bu tur ne yapılacak: { kalan, hedef, tur: normal | kor | sira | dortlu }
   secimAcik: false,   // vazoya dokunulabilir mi
@@ -264,7 +266,7 @@ function oyunuBaslat(isimler, yeniTohum) {
   tohum = yeniTohum;
   durum.oyuncular = isimler.map((ad, k) => ({ ad, renk: RENKLER[k].ad, hex: RENKLER[k].hex, can: CAN, muska: 0, yilanlar: null, koptu: false }));
   Object.assign(durum, {
-    vazolar: [], sira: 0, yon: 1, ceza: 0, gorev: null, secimAcik: false, secili: -1, mesgul: false,
+    vazolar: [], sira: 0, yon: 1, ceza: 0, gorev: null, secimAcik: false, secili: -1, mesgul: false, cikanTekler: [],
     izgara: Array.from({ length: VAZO_SAYISI / Sahne.SUTUN }, (_, s) => Array.from({ length: Sahne.SUTUN }, (_, c) => s * Sahne.SUTUN + c)),
     hazir: null, adim: 0, kuyruk: [], isleniyor: false,
   });
@@ -558,6 +560,7 @@ async function vazolariHazirla() {
 function desteKur() {
   const deste = [];
   Object.entries(KARTLAR).forEach(([tur, k]) => {
+    if (k.tek && durum.cikanTekler.includes(tur)) return;  // bu oyunda zaten çıktı
     for (let n = 0; n < k.adet; n++) deste.push(tur);
   });
   durum.deste = karistir(deste);
@@ -608,6 +611,7 @@ async function kartCek() {
   if (!durum.deste.length) desteKur();
   const tur = durum.deste.pop();
   const kart = KARTLAR[tur];
+  if (kart.tek) durum.cikanTekler.push(tur);
   Ses.kartCek();
   desteyiCiz();
   await bekle(250);
