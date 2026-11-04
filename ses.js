@@ -329,6 +329,19 @@ const Ses = (() => {
     gurultu({ sure: 0.4, seviye: 0.6, tip: 'lowpass', frekans: 1200 });
   }
 
+  // Yılan yüze yapışınca: tiz, kulak tırmalayan çığlık (yükselip çatlayan sesler + hırıltı)
+  function ciglik() {
+    [1180, 1250, 1720, 2350].forEach((f, k) => ton(f, { sure: 0.55, seviye: 0.09, tip: 'sawtooth', bitis: f * (k % 2 ? 0.6 : 1.4), atak: 0.005 }));
+    gurultu({ sure: 0.6, seviye: 0.35, tip: 'bandpass', frekans: 2600, q: 2, bitisFrekans: 1200 });
+    ton(70, { gecikme: 0.05, sure: 0.5, seviye: 0.5, tip: 'square', bitis: 40 });
+  }
+
+  // Çenesini kapatıp ısırma: kuru, sert bir şak
+  function isirma() {
+    gurultu({ sure: 0.06, seviye: 0.6, tip: 'highpass', frekans: 2500 });
+    ton(160, { sure: 0.08, seviye: 0.4, bitis: 70 });
+  }
+
   function rahatlama() {
     gurultu({ sure: 2, seviye: 0.06, tip: 'lowpass', frekans: 500, atak: 0.4 });
     ton(220, { sure: 2.2, seviye: 0.05, atak: 0.3, tip: 'triangle' });
@@ -540,7 +553,7 @@ const Ses = (() => {
   }
 
   return {
-    donus, gokGurultusu, ruzgarHamlesi,
+    donus, gokGurultusu, ruzgarHamlesi, ciglik, isirma,
     ortamBaslat, sessizlik, kalp, vurus, kirilma, hisirti, tiss, cingirak,
     atlama, rahatlama, eleme, secim, yerlestir, kazanma, acKapa,
     gerilim, kartCek, iyiKart, kotuKart, sustur, kaydet, kayitCal,

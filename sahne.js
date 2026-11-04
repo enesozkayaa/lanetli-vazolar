@@ -826,6 +826,7 @@ const Sahne = (() => {
     const deriRengi = malz({ color: 0x5a4628, roughness: 0.4, metalness: 0.08 });
     kafa.add(new THREE.Mesh(kafaGeometrisi(0.062, 0.03, 0.016, 0.09), deriRengi));
     const goz = malz({ color: 0xffc400, emissive: 0xff9900, emissiveIntensity: 1.3, roughness: 0.2 });
+    const gozMalz = goz;
     const siyah = malz({ color: 0x000000, roughness: 0.2 });
     [-1, 1].forEach(yan => {
       const g = new THREE.Mesh(kure, goz);
@@ -847,18 +848,32 @@ const Sahne = (() => {
     agizIci.scale.set(0.045, 0.01, 0.07);
     agizIci.position.set(0, -0.01, 0.005);
     kafa.add(agizIci);
+    // Boğaz: ağız sonuna kadar açılınca içeride kapkara bir delik görünür
+    const bogaz = new THREE.Mesh(kure, malz({ color: 0x080203, roughness: 0.9 }));
+    bogaz.scale.set(0.02, 0.012, 0.02);
+    bogaz.position.set(0, -0.012, -0.035);
+    kafa.add(bogaz);
+    // Uzun zehir dişleri: ağız açıldıkça öne doğru dikleşir
     const disMalz = malz({ color: 0xf4f0e4, roughness: 0.25 });
-    [-1, 1].forEach(yan => {
-      const dis = new THREE.Mesh(new THREE.ConeGeometry(0.005, 0.034, 6), disMalz);
+    const disler = [-1, 1].map(yan => {
+      const dis = new THREE.Mesh(new THREE.ConeGeometry(0.0055, 0.042, 6), disMalz);
       dis.rotation.x = Math.PI - 0.3;
       dis.position.set(yan * 0.02, -0.024, 0.058);
       kafa.add(dis);
+      return dis;
     });
     const cene = new THREE.Group();  // açılıp kapanan alt çene
     cene.position.set(0, -0.012, -0.06);
     const alt = new THREE.Mesh(kafaGeometrisi(0.05, 0.008, 0.012, 0.08), malz({ color: 0xc9b98a, roughness: 0.5 }));
     alt.position.set(0, 0, 0.06);
     cene.add(alt);
+    // Alt çenede küçük, sivri dişler
+    for (let k = 0; k < 8; k++) {
+      const yan = k % 2 ? 1 : -1;
+      const d = new THREE.Mesh(new THREE.ConeGeometry(0.0022, 0.009, 5), disMalz);
+      d.position.set(yan * (0.014 + Math.floor(k / 2) * 0.002), 0.006, 0.075 + Math.floor(k / 2) * 0.012);
+      cene.add(d);
+    }
     kafa.add(cene);
     const dil = new THREE.Group();
     dil.position.set(0, -0.01, 0.075);
@@ -875,9 +890,9 @@ const Sahne = (() => {
     dinamik.add(grup);
 
     return {
-      grup, govdeGeo, cingirak, kafa, cene, dil, malzemeler,
+      grup, govdeGeo, cingirak, kafa, cene, dil, malzemeler, disler, agizIci, gozMalz,
       omurga: Array.from({ length: GOVDE_N + 4 }, () => V()),
-      iz: [], bas: V(), bakis: null, agiz: 0, titre: false, zaman: 0, buyukluk: 1,
+      iz: [], bas: V(), bakis: null, agiz: 0, titre: false, zaman: 0, buyukluk: 1, ofke: 0,
     };
   }
 
@@ -958,8 +973,14 @@ const Sahne = (() => {
     y.kafa.scale.setScalar(y.buyukluk);
     if (y.bakis) y.kafa.lookAt(y.bakis);
     else y.kafa.lookAt(gecici.copy(y.bas).multiplyScalar(2).sub(p[1]));
-    y.cene.rotation.x = y.agiz * 0.8;
-    y.dil.scale.z = 0.2 + 0.8 * Math.max(0, Math.sin(y.zaman * 9));
+    // agiz 0..1.8: 1'in üstü saldırı anı, çene neredeyse dik açıyla açılır, üst çene de geriye kalkar
+    y.cene.rotation.x = y.agiz * 0.85;
+    if (y.agiz > 0.6) y.kafa.rotateX(-(y.agiz - 0.6) * 0.22);
+    y.disler.forEach(d => (d.rotation.x = Math.PI - 0.3 - Math.min(y.agiz, 1.8) * 0.45));
+    y.agizIci.scale.y = 0.01 + Math.min(y.agiz, 1.8) * 0.012;
+    y.gozMalz.emissiveIntensity = 1.3 + y.ofke * 4 + (y.ofke ? Math.sin(y.zaman * 40) * 0.8 : 0);
+    // Dil: saldırıda hızlı hızlı çıkıp girer
+    y.dil.scale.z = 0.2 + 0.8 * Math.max(0, Math.sin(y.zaman * (y.ofke ? 30 : 9)));
   }
 
   function yilanSil(y) {
@@ -986,23 +1007,50 @@ const Sahne = (() => {
     if (kesme >= 1) yilanSil(y);
   }
 
-  // Ağzı açık, dişler önde: kafa kameranın dibine atılır. Kafanın son yerini döndürür.
+  // Önce geri çekilip ağzını sonuna kadar açar, sonra hızlanarak kameraya yapışır ve ekranda iki kez ısırır.
+  // Kafanın son yerini döndürür.
   async function yuzeAtla(y, olaylar, sure) {
-    y.agiz = 1;
     y.titre = true;
     y.bakis = bakis.konum;
-    const hedef = bakis.konum.clone().lerp(bakis.hedef, 0.17);  // bütün surat (ağız, dişler) ekrana sığsın
+    y.ofke = 1;
     const cikis = y.bas.clone();
+    // 1) Gerilme: S gibi geri kasılır, ağız açılır, dişler dikleşir
+    const geri = cikis.clone().add(V(0, 0.1, -0.1));
+    Ses.tiss(0.45, 0.3);
+    await animasyon(0.24, t => {
+      y.bas.lerpVectors(cikis, geri, t);
+      y.agiz = 0.5 + t * 1.1;
+      y.buyukluk = 1 + t * 0.15;
+    });
+    // 2) Saldırı: hızlanarak ekrana yapışır, ağız sonuna kadar açık
+    const hedef = bakis.konum.clone().lerp(bakis.hedef, 0.13);  // bütün surat (ağız, dişler) ekranı doldursun
     await animasyon(sure, t => {
-      y.bas.lerpVectors(cikis, hedef, t);
-      y.buyukluk = 1 + t * 0.8;
-    }, dogrusal);
+      y.bas.lerpVectors(geri, hedef, t);
+      y.buyukluk = 1.15 + t * 1.25;
+      y.agiz = 1.6 + t * 0.2;
+    }, t => t * t);
     Ses.atlama();
-    sarsinti = 0.25;
-    if (navigator.vibrate) navigator.vibrate([250, 60, 350]);
+    Ses.ciglik();
+    sarsinti = 0.5;
+    if (navigator.vibrate) navigator.vibrate([300, 40, 200, 40, 450]);
     if (olaylar.atladi) olaylar.atladi();
-    await bekle(0.8);
+    // 3) Ekranın dibinde iki kez ısırır: çene kapanıp açılır, kafa titrer
+    let sonIsirik = -1;
+    await animasyon(0.75, (t, ham) => {
+      const isirik = Math.abs(Math.sin(ham * Math.PI * 2));
+      y.agiz = 1.8 - isirik * 1.2;
+      const kac = Math.floor(ham * 2);
+      if (isirik > 0.95 && kac !== sonIsirik) {
+        sonIsirik = kac;
+        Ses.isirma();
+      }
+      y.bas.set(hedef.x + (rnd() - 0.5) * 0.02, hedef.y + (rnd() - 0.5) * 0.02, hedef.z);
+    }, dogrusal);
+    y.agiz = 1.6;
+    await bekle(0.3);
+    y.bas.copy(hedef);
     y.titre = false;
+    y.ofke = 0;
     return hedef;
   }
 
@@ -1034,7 +1082,8 @@ const Sahne = (() => {
       const hedef = await yuzeAtla(y, olaylar, 0.15);
       await animasyon(0.45, t => {
         y.bas.lerpVectors(hedef, ustNokta, t);
-        y.buyukluk = 1.8 - t * 0.8;
+        y.buyukluk = 2.4 - t * 1.4;
+        y.agiz = 1.6 - t * 0.6;
       });
     } else if (davranis === 'donus') {
       // Başı sürünüp giden yılanla birebir aynı; herkes rahatlar... ve sürünürken
@@ -1058,7 +1107,8 @@ const Sahne = (() => {
       const hedef = await yuzeAtla(y, olaylar, 0.2);
       await animasyon(0.45, t => {
         y.bas.lerpVectors(hedef, kalk, t);
-        y.buyukluk = 1.8 - t * 0.8;
+        y.buyukluk = 2.4 - t * 1.4;
+        y.agiz = 1.6 - t * 0.6;
       });
     } else {
       // Kafasını kaldırıp kameraya döner
