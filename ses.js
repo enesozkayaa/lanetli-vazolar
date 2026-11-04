@@ -516,7 +516,31 @@ const Ses = (() => {
     seviyeyiAyarla();
   }
 
+  // Lanetli Dönüş: taş zemin üstünde ağır bir şey sürünüyor (3 saniye boyunca gıcırtılı gürleme)
+  function donus() {
+    ton(46, { sure: 3.4, seviye: 0.35, tip: 'sawtooth', bitis: 40, atak: 0.4 });
+    ton(49.5, { sure: 3.4, seviye: 0.25, tip: 'sawtooth', bitis: 43, atak: 0.5 });
+    gurultu({ sure: 3.3, seviye: 0.16, tip: 'lowpass', frekans: 300, atak: 0.5, tut: 0.8 });
+    for (let k = 0; k < 7; k++) {
+      const f = 700 + Math.random() * 900;
+      gurultu({ gecikme: 0.3 + k * 0.42, sure: 0.35, seviye: 0.05, frekans: f, q: 9, atak: 0.1, bitisFrekans: f * 0.7 });  // taş gıcırtısı
+    }
+  }
+
+  // Şimşek çakınca uzaktan gelen gök gürültüsü
+  function gokGurultusu() {
+    gurultu({ gecikme: 0.4, sure: 3.2, seviye: 0.35, tip: 'lowpass', frekans: 260, atak: 0.05, bitisFrekans: 90 });
+    ton(35, { gecikme: 0.4, sure: 2.6, seviye: 0.3, bitis: 28, atak: 0.1 });
+    gurultu({ gecikme: 0.45, sure: 0.4, seviye: 0.12, tip: 'lowpass', frekans: 1200 });
+  }
+
+  // Mumları titreten ani rüzgâr
+  function ruzgarHamlesi() {
+    gurultu({ sure: 1.8, seviye: 0.12, frekans: 500, q: 0.6, atak: 0.5, bitisFrekans: 1400 });
+  }
+
   return {
+    donus, gokGurultusu, ruzgarHamlesi,
     ortamBaslat, sessizlik, kalp, vurus, kirilma, hisirti, tiss, cingirak,
     atlama, rahatlama, eleme, secim, yerlestir, kazanma, acKapa,
     gerilim, kartCek, iyiKart, kotuKart, sustur, kaydet, kayitCal,

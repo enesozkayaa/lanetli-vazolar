@@ -20,7 +20,7 @@ const CAN = 3;               // her oyuncunun canı = sakladığı yılan sayıs
 const VAZO_SAYISI = 30;
 const ISIM_ANAHTARI = 'lanetliVazolar.isimler';
 
-// 40 kartlık deste: 26 iyi (%65), 14 kötü. Adetleri değiştirerek oranla oynayabilirsin.
+// 43 kartlık deste: 29 iyi (%67), 14 kötü. Adetleri değiştirerek oranla oynayabilirsin.
 // Güçlü kartlar (Başkası Adına, Dörtlü Göz, Can Ekle) bilerek nadir tutuldu.
 const KARTLAR = {
   pas:    { iyi: true,  adet: 6,  ikon: '⏭️', ad: 'Pas', aciklama: 'Bu tur hiç vazo kırmadan sıranı geçirirsin.' },
@@ -30,6 +30,7 @@ const KARTLAR = {
   adina:  { iyi: true,  adet: 3,  ikon: '🎭', ad: 'Başkası Adına', aciklama: 'Bir rakip seç, sonra bir vazo kır. Yılan çıkarsa canı giden o olur! (Kendi yılanının yerini biliyorsun...)' },
   dortlu: { iyi: true,  adet: 3,  ikon: '👁️', ad: 'Dörtlü Göz', aciklama: 'Kare şeklindeki 4 vazoyu seç. Altlarında kaç yılan olduğu herkese söylenir. Sonra 1 vazo kırarsın.' },
   can:    { iyi: true,  adet: 2,  ikon: '💖', ad: 'Can Ekle', aciklama: '+1 can kazanırsın! Sonra 1 vazo kırarsın.' },
+  dondur: { iyi: true,  adet: 3,  ikon: '🌀', ad: 'Lanetli Dönüş', aciklama: 'Bütün vazolar yavaşça 90 derece döner (sağa mı sola mı, lanet seçer). Yılanlarının nereye gittiğini iyi takip et! Sonra 1 vazo kırarsın.' },
   iki:    { iyi: false, adet: 7,  ikon: '✌️', ad: 'Çifte Lanet', aciklama: 'Peş peşe 2 vazo kırmak zorundasın.' },
   uc:     { iyi: false, adet: 5,  ikon: '💀', ad: 'Üçlü Lanet', aciklama: 'Peş peşe 3 vazo kırmak zorundasın.' },
   kor:    { iyi: false, adet: 1,  ikon: '🎲', ad: 'Kör Talih', aciklama: 'Vazoyu sen seçemezsin. Lanet senin yerine seçer.' },
@@ -73,6 +74,7 @@ function karistir(liste) {
 const durum = {
   asama: 'menu',      // menu | yerlestir | oyun | bitti
   oyuncular: [],      // { ad, renk, hex, can, muska, yilanlar: [vazo no], koptu }
+  izgara: [],         // tahtanın şu anki dizilişi: izgara[satır][sütun] = vazo no (Lanetli Dönüş kartı çevirir)
   vazolar: [],        // { sahipler: [oyuncu no], vurusGerek, vurus, kirik, davranis, hisirti }
   sira: 0,
   yon: 1,             // 1 = saat yönü, -1 = ters (Ters Dön kartı)
@@ -263,6 +265,7 @@ function oyunuBaslat(isimler, yeniTohum) {
   durum.oyuncular = isimler.map((ad, k) => ({ ad, renk: RENKLER[k].ad, hex: RENKLER[k].hex, can: CAN, muska: 0, yilanlar: null, koptu: false }));
   Object.assign(durum, {
     vazolar: [], sira: 0, yon: 1, ceza: 0, gorev: null, secimAcik: false, secili: -1, mesgul: false,
+    izgara: Array.from({ length: VAZO_SAYISI / Sahne.SUTUN }, (_, s) => Array.from({ length: Sahne.SUTUN }, (_, c) => s * Sahne.SUTUN + c)),
     hazir: null, adim: 0, kuyruk: [], isleniyor: false,
   });
   desteKur();
@@ -634,6 +637,14 @@ async function kartCek() {
     o.can++;
     oyunculariCiz();
     gorevBaslat({ kalan: 1 }, `💖 ${adEtiketi(o)} 1 can kazandı!`);
+  } else if (tur === 'dondur') {
+    // Yön tohumlu rastgeleyle seçilir: online'da herkeste aynı
+    const yon = rastgele() < 0.5 ? 1 : -1;
+    mesaj(`🌀 Vazolar ${yon > 0 ? 'sağa' : 'sola'} dönüyor... Yılanlarını gözünle takip et!`);
+    Ses.donus();
+    await Sahne.dondur(yon);
+    izgarayiCevir(yon);
+    gorevBaslat({ kalan: 1 }, `🌀 Tahta ${yon > 0 ? 'sağa' : 'sola'} döndü.`);
   } else if (tur === 'hediye') {
     durum.ceza = 2;
     gorevBaslat({ kalan: 1 });
@@ -814,17 +825,31 @@ async function turSonu() {
 }
 
 // ---------- Özel kartlar ----------
+// Tahtanın şu anki dizilişinde vazonun yeri (Lanetli Dönüş'ten sonra satırlar sütun olur)
+function izgaraYeri(i) {
+  for (let s = 0; s < durum.izgara.length; s++) {
+    const c = durum.izgara[s].indexOf(i);
+    if (c >= 0) return [s, c];
+  }
+  return [0, 0];
+}
+
+// Lanetli Dönüş: yon 1 = sağa (saat yönü). 5x6 tahta 6x5 olur.
+function izgarayiCevir(yon) {
+  const eski = durum.izgara, S = eski.length, C = eski[0].length;
+  durum.izgara = Array.from({ length: C }, (_, s) => Array.from({ length: S }, (_, c) => (yon > 0 ? eski[S - 1 - c][s] : eski[c][C - 1 - s])));
+}
+
 // Dörtlü Göz: dokunulan vazo + sağı + altı + çaprazı (kenardaysa kare içeri kayar)
 function dortluVazolari(i) {
-  const S = Sahne.SUTUN, satirSayisi = VAZO_SAYISI / S;
-  const s = Math.min(Math.floor(i / S), satirSayisi - 2);
-  const c = Math.min(i % S, S - 2);
-  return [s * S + c, s * S + c + 1, (s + 1) * S + c, (s + 1) * S + c + 1];
+  const g = durum.izgara;
+  const [s0, c0] = izgaraYeri(i);
+  const s = Math.min(s0, g.length - 2), c = Math.min(c0, g[0].length - 2);
+  return [g[s][c], g[s][c + 1], g[s + 1][c], g[s + 1][c + 1]];
 }
 
 function satirVazolari(i) {
-  const S = Sahne.SUTUN, satir = Math.floor(i / S);
-  return Array.from({ length: S }, (_, c) => satir * S + c);
+  return [...durum.izgara[izgaraYeri(i)[0]]];
 }
 
 // Karttan önce neyin seçileceğini halkalarla göster (fareyle üzerine gelince ya da ilk dokunuşta)

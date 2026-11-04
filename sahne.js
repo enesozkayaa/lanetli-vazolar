@@ -18,7 +18,7 @@ const Sahne = (() => {
     [[0, 0], [0.12, 0], [0.17, 0.08], [0.22, 0.3], [0.21, 0.5], [0.14, 0.66], [0.09, 0.76], [0.1, 0.82], [0.13, 0.86]],               // uzun testi
   ];
 
-  let renderer, sahne, kamera, dinamik, odakIsigi, cekic;
+  let renderer, sahne, kamera, dinamik, odakIsigi, cekic, ayIsigi;
   const saat = new THREE.Clock();
   const isin = new THREE.Raycaster();
   const fare = new THREE.Vector2();
@@ -70,6 +70,7 @@ const Sahne = (() => {
 
     isiklariKur();
     zeminKur();
+    korkuKur();
     cekic = cekicYap();
     sahne.add(cekic);
     sifirla();
@@ -109,7 +110,7 @@ const Sahne = (() => {
     sahne.add(new THREE.AmbientLight(0x5a5a7a, 1.2));
     sahne.add(new THREE.HemisphereLight(0x8a90b8, 0x3a2414, 0.85));  // tepeden soğuk, yerden sıcak yansıma
 
-    const ay = new THREE.DirectionalLight(0x9aa6d0, 1.1);  // pencereden sızan ay ışığı
+    const ay = ayIsigi = new THREE.DirectionalLight(0x9aa6d0, 1.1);  // pencereden sızan ay ışığı
     ay.position.set(-3, 8, 2);
     ay.castShadow = true;
     ay.shadow.mapSize.set(1024, 1024);
@@ -174,6 +175,172 @@ const Sahne = (() => {
     zemin.rotation.x = -Math.PI / 2;
     zemin.receiveShadow = true;
     sahne.add(zemin);
+  }
+
+  // ---------- Korku: mahzen süsleri ve ara sıra olan olaylar ----------
+  // Kafatasları, kemikler, örümcek ağları, havada uçuşan toz; ara sıra şimşek, mumları söndüren rüzgâr,
+  // karanlıkta beliren kırmızı gözler. Hepsi sadece görüntü: oyuna etkisi yok (her telefonda farklı anda olabilir).
+  let havaTozu, mumGucu = 1;
+  const olayZamani = { simsek: 25, ruzgar: 15, goz: 12 };
+  const kemikMalz = () => new THREE.MeshStandardMaterial({ color: 0xcfc2a2, roughness: 0.9 });
+
+  function kafatasi() {
+    const grup = new THREE.Group();
+    const m = kemikMalz();
+    const kafa = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), m);
+    kafa.scale.set(1, 0.92, 1.12);
+    kafa.position.y = 0.12;
+    const cene = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.05, 0.1), m);
+    cene.position.set(0, 0.04, 0.07);
+    const kara = new THREE.MeshBasicMaterial({ color: 0x050303 });
+    [-1, 1].forEach(yan => {
+      const goz = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), kara);
+      goz.position.set(yan * 0.045, 0.13, 0.11);
+      grup.add(goz);
+    });
+    const burun = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.035, 3), kara);
+    burun.position.set(0, 0.085, 0.125);
+    burun.rotation.x = Math.PI;
+    grup.add(kafa, cene, burun);
+    grup.traverse(n => (n.castShadow = true));
+    return grup;
+  }
+
+  function kemik() {
+    const grup = new THREE.Group();
+    const m = kemikMalz();
+    const govde = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.38, 8), m);
+    govde.rotation.z = Math.PI / 2;
+    grup.add(govde);
+    [-0.19, 0.19].forEach(x => [-0.018, 0.018].forEach(z => {
+      const uc = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 6), m);
+      uc.position.set(x, 0, z);
+      grup.add(uc);
+    }));
+    grup.position.y = 0.03;
+    return grup;
+  }
+
+  function orumcekAgi() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d');
+    g.strokeStyle = 'rgba(230,230,235,.55)';
+    g.lineWidth = 1.2;
+    const kol = 9;
+    for (let k = 0; k < kol; k++) {  // köşeden yayılan iplikler
+      const a = (k / (kol - 1)) * Math.PI / 2;
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.lineTo(Math.cos(a) * 256, Math.sin(a) * 256);
+      g.stroke();
+    }
+    for (let r = 25; r < 250; r += 22 + rnd() * 8) {  // halkalar
+      g.beginPath();
+      for (let k = 0; k < kol; k++) {
+        const a = (k / (kol - 1)) * Math.PI / 2;
+        const rr = r + (k % 2 ? 4 : 0);
+        if (k) g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        else g.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      }
+      g.stroke();
+    }
+    const doku = new THREE.CanvasTexture(c);
+    return new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.4), new THREE.MeshBasicMaterial({ map: doku, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  }
+
+  function korkuKur() {
+    // Mum diplerinde kafatasları ve kemikler
+    [[-3.0, -2.75, 0.6], [3.55, 2.85, -0.8], [-3.75, 0.45, 1.2], [2.95, -2.45, -0.3]].forEach(([x, z, r]) => {
+      const k = kafatasi();
+      k.position.set(x, 0, z);
+      k.rotation.y = r;
+      sahne.add(k);
+    });
+    [[-3.4, 2.75, 0.5], [3.7, -0.35, 2.1], [0.6, -3.05, 1.3], [-0.9, 3.15, -0.6], [3.0, 2.2, 0.9]].forEach(([x, z, r]) => {
+      const k = kemik();
+      k.position.x = x;
+      k.position.z = z;
+      k.rotation.y = r;
+      sahne.add(k);
+    });
+    // Arka köşelerde örümcek ağları
+    [[-4.2, 1.6, -3.4, 0], [4.2, 1.6, -3.4, Math.PI / 2]].forEach(([x, y, z, r]) => {
+      const ag = orumcekAgi();
+      ag.position.set(x, y, z);
+      ag.rotation.z = r + Math.PI;
+      sahne.add(ag);
+    });
+    // Mum ışığında süzülen toz zerreleri
+    const N = 260;
+    const konum = new Float32Array(N * 3);
+    for (let k = 0; k < N; k++) konum.set([(rnd() - 0.5) * 8, rnd() * 2.6, (rnd() - 0.5) * 7], k * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(konum, 3));
+    havaTozu = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffd9a0, size: 0.025, transparent: true, opacity: 0.45, depthWrite: false }));
+    sahne.add(havaTozu);
+  }
+
+  // Şimşek: pencereden giren ay ışığı iki kez çakar, sonra gök gürler
+  function simsek() {
+    const i0 = ayIsigi.intensity;
+    Ses.gokGurultusu();
+    return animasyon(0.9, (t, ham) => {
+      const cakma = ham < 0.08 ? 1 : ham < 0.16 ? 0.15 : ham < 0.26 ? 0.8 : Math.max(0, 1 - ham) * 0.25;
+      ayIsigi.intensity = ham >= 1 ? i0 : i0 + cakma * 9;
+    }, dogrusal);
+  }
+
+  // Ani rüzgâr: bütün mumlar sönmek üzere titrer, sonra toparlanır
+  function ruzgar() {
+    Ses.ruzgarHamlesi();
+    return animasyon(2.2, (t, ham) => {
+      mumGucu = ham >= 1 ? 1 : 1 - Math.sin(ham * Math.PI) * 0.75 + (rnd() - 0.5) * 0.15 * Math.sin(ham * Math.PI);
+    }, dogrusal);
+  }
+
+  // Karanlığın içinde bir çift kırmızı göz belirir, bir kez kırpar, kaybolur
+  function gozler() {
+    const aci = -Math.PI / 2 + (rnd() - 0.5) * 2.2;  // çoğunlukla arkada ve yanlarda
+    const r = 5 + rnd() * 1.2;
+    const grup = new THREE.Group();
+    grup.position.set(Math.cos(aci) * r, 0.35 + rnd() * 0.5, Math.sin(aci) * r);
+    grup.lookAt(0, 0.4, 2);
+    const malz = new THREE.MeshBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0, fog: false });
+    [-1, 1].forEach(yan => {
+      const goz = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), malz);
+      goz.scale.set(1.4, 0.7, 0.5);
+      goz.position.x = yan * 0.09;
+      grup.add(goz);
+    });
+    sahne.add(grup);
+    return animasyon(4, (t, ham) => {
+      const parlak = ham < 0.25 ? ham / 0.25 : ham > 0.8 ? (1 - ham) / 0.2 : 1;
+      malz.opacity = parlak * 0.9;
+      grup.scale.y = Math.abs(ham - 0.55) < 0.025 ? 0.1 : 1;
+      if (ham >= 1) sahne.remove(grup);
+    }, dogrusal);
+  }
+
+  function korkuDongu(dt, z) {
+    if (havaTozu) {
+      havaTozu.rotation.y = z * 0.01;
+      havaTozu.position.y = Math.sin(z * 0.2) * 0.08;
+    }
+    if (hizliMod) return;
+    Object.keys(olayZamani).forEach(ad => (olayZamani[ad] -= dt));
+    if (olayZamani.simsek <= 0) {
+      olayZamani.simsek = 30 + rnd() * 35;
+      simsek();
+    }
+    if (olayZamani.ruzgar <= 0) {
+      olayZamani.ruzgar = 22 + rnd() * 30;
+      ruzgar();
+    }
+    if (olayZamani.goz <= 0) {
+      olayZamani.goz = 18 + rnd() * 25;
+      gozler();
+    }
   }
 
   // ---------- Vazolar ----------
@@ -961,6 +1128,27 @@ const Sahne = (() => {
     return kameraGit(genelKonum(), V(0, 0, 0.15), 1.1);
   }
 
+  // ---------- Döndürme kartı ----------
+  // Bütün vazolar (kırıkları ve parçalarıyla) tahtanın ortası etrafında yavaşça 90 derece döner,
+  // döner tabla gibi: vazolar yer değiştirirken hep kameraya bakar. yon: 1 = sağa (saat yönü), -1 = sola.
+  async function dondur(yon) {
+    const aci = -yon * Math.PI / 2;  // yukarıdan bakınca saat yönü = Y ekseninde eksi
+    const parcalar = dinamik.children.map(n => ({ n, x: n.position.x, z: n.position.z, ry: n.rotation.y }));
+    const Y = V(0, 1, 0);
+    sarsinti = 0.04;
+    await animasyon(3.2, t => {
+      const a = aci * t;
+      const c = Math.cos(a), s = Math.sin(a);
+      parcalar.forEach(p => {
+        p.n.position.x = p.x * c + p.z * s;
+        p.n.position.z = -p.x * s + p.z * c;
+      });
+      sarsinti = Math.max(sarsinti, 0.015);
+    });
+    sarsinti = 0;
+    vazolar.forEach(v => v.konum.applyAxisAngle(Y, aci));
+  }
+
   function boyutla() {
     const g = window.innerWidth, y = window.innerHeight;
     renderer.setSize(g, y);
@@ -1010,10 +1198,11 @@ const Sahne = (() => {
       if (animasyonlar[k] && animasyonlar[k](dt) === false) animasyonlar.splice(k, 1);
     }
 
+    korkuDongu(dt, z);
     mumlar.forEach(m => {
       const titreme = 0.75 + 0.15 * Math.sin(z * 9 + m.faz) + 0.1 * Math.sin(z * 23 + m.faz * 2) + (rnd() - 0.5) * 0.12;
-      m.isik.intensity = 6 * titreme;
-      m.alev.scale.set(1, 1.6 + titreme * 0.4, 1);
+      m.isik.intensity = 6 * titreme * mumGucu;
+      m.alev.scale.set(1, (1.6 + titreme * 0.4) * (0.4 + 0.6 * mumGucu), 1);
     });
 
     vazolar.forEach((v, i) => {
@@ -1036,7 +1225,7 @@ const Sahne = (() => {
 
   return {
     SUTUN,
-    baslat, sifirla, odakla, genelBakis, vur, yilanCikar, bosCikar, parcaKaldir,
+    baslat, sifirla, odakla, genelBakis, vur, yilanCikar, bosCikar, parcaKaldir, dondur,
     isaretle(i, renk) {
       const v = vazolar[i];
       v.isaret.visible = !!renk;
@@ -1046,6 +1235,8 @@ const Sahne = (() => {
       vazolar.forEach(v => (v.isaret.visible = false));
     },
     hizli(acik) { hizliMod = acik; },
+    // Vazonun masadaki yeri (dönüşten sonra dizilişi kontrol etmek için)
+    vazoKonumu(i) { return { x: vazolar[i].grup.position.x, z: vazolar[i].grup.position.z }; },
     tiklayinca(fn) { tiklaninca = fn; },
     uzerineGelinince(fn) { uzerineGelince = fn; },
     secilebilirlik(fn) { secilebilir = fn; },
